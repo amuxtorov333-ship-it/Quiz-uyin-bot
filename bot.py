@@ -17,20 +17,19 @@ dp = Dispatcher()
 
 games: dict[int, dict] = {}   # chat_id -> faol o'yin holati
 
-# ==================== GROQ AI SERVISI (ISHLAYDIGAN MODELLAR BILAN) ====================
+# ==================== GROQ AI SERVISI (HOZIRGI FAOL MODELLAR BILAN) ====================
 
 async def ask_ai(prompt: str) -> str:
-    """Groq AI bilan bog'lanuvchi va faol modelni avtomatik topuvchi funksiya"""
+    """Groq AI bilan bog'lanuvchi va hozirgi faol modellardan foydalanuvchi funksiya"""
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         return "⚠️ Render Environment bo'limida GROQ_API_KEY topilmadi!"
     
-    # Groq-da rasmiy va doimiy faol bo'lgan modellar
+    # Groq serverida hozirda 100% faol va rasmiy ishlayotgan modellar
     models = [
         "llama-3.1-8b-instant",
-        "llama3-70b-8192",
-        "llama3-8b-8192",
-        "mixtral-8x7b-32768"
+        "gemma2-9b-it",
+        "llama3-8b-8192"
     ]
     
     url = "https://api.groq.com/openai/v1/chat/completions"
@@ -55,7 +54,6 @@ async def ask_ai(prompt: str) -> str:
                     else:
                         res_text = await resp.text()
                         last_error = f"{model} ({resp.status}): {res_text[:100]}"
-                        # Xato bersa (400, 404 va b.), to'xtamasdan keyingi modelga o'tadi
                         continue
             except Exception as e:
                 last_error = f"Ulanish xatosi: {e}"
@@ -337,3 +335,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+    
