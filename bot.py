@@ -6,7 +6,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.enums import ChatMemberStatus, ChatType, ParseMode
 from aiogram.client.default import DefaultBotProperties
 
-TOKEN = "BU_YERGA_TOKEN"
+TOKEN = "8697416720:AAHtXUkzIfWLvgHak1RIEHssOj1YVX-cjD0"
 
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
