@@ -11,36 +11,35 @@ from aiogram.client.default import DefaultBotProperties
 
 # Render Environment Variables bo'limidan kalitlar olinadi
 TOKEN = os.getenv("TOKEN") or os.getenv("BOT_TOKEN") or "BU_YERGA_TOKEN"
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or "AIzaSyAW8q_ACM13EMq9V_qsDxJTXTcPImlbq-E"
 
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
 games: dict[int, dict] = {}   # chat_id -> faol o'yin holati
 
-# ==================== GEMINI AI SERVISI ====================
+# ==================== GEMINI AI SERVISI (XATONIKI ANIQLASH BILAN) ====================
 
 async def ask_gemini(prompt: str) -> str:
-    """Google Gemini AI bilan bog'lanuvchi funksiya"""
-    if not GEMINI_API_KEY or GEMINI_API_KEY == "BU_YERGA_GEMINI_KEY":
-        return "⚠️ AI kaliti (GEMINI_API_KEY) o'rnatilmagan! Render Environment'ga qo'shing."
+    """Google Gemini AI bilan bog'lanuvchi va xatoni aniq ko'rsatuvchi funksiya"""
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return "⚠️ Render Environment bo'limida GEMINI_API_KEY topilmadi!"
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}]
-    }
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
     
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers) as resp:
+                res_text = await resp.text()
                 if resp.status == 200:
                     data = await resp.json()
                     return data["candidates"][0]["content"]["parts"][0]["text"]
                 else:
-                    return f"⚠️ AI javob berishda xatolik yuz berdi (Status: {resp.status})."
+                    return f"⚠️ AI API Xatoligi ({resp.status}): {res_text[:150]}"
     except Exception as e:
-        return f"⚠️ Xatolik yuz berdi: {e}"
+        return f"⚠️ Ulanishda xatolik yuz berdi: {e}"
 
 # ==================== MA'LUMOTLAR ====================
 
@@ -131,7 +130,7 @@ async def cmd_start(message: Message):
         await message.answer(
             "Salom! Men guruh o'yinlari va Sun'iy Intellekt botiman 🤖🎮\n\n"
             "• Meni <b>guruhga qo'shing</b> va /oyin yozing.\n"
-            "• Istalgan savolingizga AI orqali javob olish uchun: <code>/ai [savolingiz]</code>"
+            "• AI ga savol berish uchun: <code>/ai [savolingiz]</code>"
         )
     else:
         await message.answer("🎮 O'yinni boshlash uchun /oyin yozing.")
@@ -192,18 +191,24 @@ async def on_choice(cb: CallbackQuery):
     elif action == "ai_quiz":
         wait_msg = await cb.message.answer("🤖 AI yangi savol va javob tayyorlamoqda...")
         prompt = (
-            "O'zbek tilida mantiqiy yoki umumiy bilimga oid 1 ta qiziqarli viktorina savoli va uning javobini yarat. "
-            "Javob faqat 1 ta so'zdan iborat bo'lsin. Quyidagi aniq formatda javob ber:\n"
-            "Savol: [Savol matni]\nJavob: [Javob matni]"
+            "O'zbek tilida 1 ta qiziqarli mantiqiy yoki bilimga oid viktorina savoli va uning 1 ta so'zdan iborat javobini tuz.\n"
+            "Aniq quyidagi formatda javob ber:\n"
+            "Savol: [savol matni]\n"
+            "Javob: [javob matni]"
         )
         ai_res = await ask_gemini(prompt)
-        
+
+        # Agar AI xatolik matni qaytarsa
+        if ai_res.startswith("⚠️"):
+            return await wait_msg.edit_text(ai_res)
+
         q_text, a_text = "", ""
         for line in ai_res.strip().split("\n"):
-            if line.startswith("Savol:"):
-                q_text = line.replace("Savol:", "").strip()
-            elif line.startswith("Javob:"):
-                a_text = line.replace("Javob:", "").strip()
+            clean_line = line.replace("*", "").strip()
+            if clean_line.lower().startswith("savol:"):
+                q_text = clean_line.split(":", 1)[1].strip()
+            elif clean_line.lower().startswith("javob:"):
+                a_text = clean_line.split(":", 1)[1].strip()
 
         if q_text and a_text:
             games[chat_id] = {"type": "quiz", "answers": [norm(a_text)]}
@@ -212,7 +217,7 @@ async def on_choice(cb: CallbackQuery):
                 f"Birinchi to'g'ri javob yozgan yutadi!"
             )
         else:
-            await wait_msg.edit_text("⚠️ AI savol tuzishda xatolik qildi. Qayta urinib ko'ring.")
+            await wait_msg.edit_text(f"⚠️ AI javobi formati mos kelmadi:\n\n<code>{ai_res}</code>")
 
     elif action == "riddle":
         r = random.choice(TOPISHMOQLAR)
