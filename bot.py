@@ -1,6 +1,7 @@
 import asyncio
 import os
 import random
+import aiohttp
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command, CommandStart
@@ -8,13 +9,38 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.enums import ChatMemberStatus, ChatType, ParseMode
 from aiogram.client.default import DefaultBotProperties
 
-# Render Environment Variables bo'limidan "TOKEN" yoki "BOT_TOKEN" olinadi
+# Render Environment Variables bo'limidan kalitlar olinadi
 TOKEN = os.getenv("TOKEN") or os.getenv("BOT_TOKEN") or "BU_YERGA_TOKEN"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or "AIzaSyAW8q_ACM13EMq9V_qsDxJTXTcPImlbq-E"
 
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
 games: dict[int, dict] = {}   # chat_id -> faol o'yin holati
+
+# ==================== GEMINI AI SERVISI ====================
+
+async def ask_gemini(prompt: str) -> str:
+    """Google Gemini AI bilan bog'lanuvchi funksiya"""
+    if not GEMINI_API_KEY or GEMINI_API_KEY == "BU_YERGA_GEMINI_KEY":
+        return "⚠️ AI kaliti (GEMINI_API_KEY) o'rnatilmagan! Render Environment'ga qo'shing."
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data["candidates"][0]["content"]["parts"][0]["text"]
+                else:
+                    return f"⚠️ AI javob berishda xatolik yuz berdi (Status: {resp.status})."
+    except Exception as e:
+        return f"⚠️ Xatolik yuz berdi: {e}"
 
 # ==================== MA'LUMOTLAR ====================
 
@@ -59,7 +85,8 @@ async def is_admin(chat_id: int, user_id: int) -> bool:
 
 def menu_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🧠 Viktorina", callback_data="g:quiz")],
+        [InlineKeyboardButton(text="🧠 Oddiy Viktorina", callback_data="g:quiz")],
+        [InlineKeyboardButton(text="🤖 AI Viktorina (Cheksiz)", callback_data="g:ai_quiz")],
         [InlineKeyboardButton(text="🧩 Topishmoq", callback_data="g:riddle")],
         [InlineKeyboardButton(text="🔢 Son topish", callback_data="g:number")],
         [InlineKeyboardButton(text="🔗 So'z zanjiri", callback_data="g:chain")],
@@ -77,6 +104,7 @@ async def on_bot_status(update: types.ChatMemberUpdated):
                 update.chat.id,
                 "✅ Rahmat, men <b>admin</b> bo'ldim!\n\n"
                 "🎮 O'yinlarni boshlash: /oyin\n"
+                "🤖 AI ga savol berish: /ai [savol]\n"
                 "🛑 To'xtatish: /stop"
             )
         except Exception:
@@ -101,12 +129,23 @@ async def on_bot_status(update: types.ChatMemberUpdated):
 async def cmd_start(message: Message):
     if message.chat.type == ChatType.PRIVATE:
         await message.answer(
-            "Salom! Men guruh o'yinlari botiman 🎮\n\n"
-            "Meni <b>guruhga qo'shing</b> va <b>admin</b> qiling, "
-            "keyin guruhda /oyin yozing."
+            "Salom! Men guruh o'yinlari va Sun'iy Intellekt botiman 🤖🎮\n\n"
+            "• Meni <b>guruhga qo'shing</b> va /oyin yozing.\n"
+            "• Istalgan savolingizga AI orqali javob olish uchun: <code>/ai [savolingiz]</code>"
         )
     else:
         await message.answer("🎮 O'yinni boshlash uchun /oyin yozing.")
+
+@dp.message(Command("ai"))
+async def cmd_ai(message: Message):
+    """AI bilan muloqot buyrug'i"""
+    prompt = message.text.replace("/ai", "").strip()
+    if not prompt:
+        return await message.reply("🤖 AI ga savol berish uchun buyruqdan so'ng matn yozing.\nMasalan: <code>/ai Toshkent haqida qiziqarli fakt ayting</code>")
+    
+    wait_msg = await message.reply("🤔 Sun'iy intellekt o'ylamoqda...")
+    ai_response = await ask_gemini(prompt)
+    await wait_msg.edit_text(ai_response)
 
 @dp.message(Command("oyin", "game"))
 async def cmd_game(message: Message):
@@ -149,6 +188,31 @@ async def on_choice(cb: CallbackQuery):
             f"🧠 <b>Viktorina!</b>\n\n❓ {q['q']}\n\n"
             f"Birinchi to'g'ri javob yozgan yutadi!"
         )
+
+    elif action == "ai_quiz":
+        wait_msg = await cb.message.answer("🤖 AI yangi savol va javob tayyorlamoqda...")
+        prompt = (
+            "O'zbek tilida mantiqiy yoki umumiy bilimga oid 1 ta qiziqarli viktorina savoli va uning javobini yarat. "
+            "Javob faqat 1 ta so'zdan iborat bo'lsin. Quyidagi aniq formatda javob ber:\n"
+            "Savol: [Savol matni]\nJavob: [Javob matni]"
+        )
+        ai_res = await ask_gemini(prompt)
+        
+        q_text, a_text = "", ""
+        for line in ai_res.strip().split("\n"):
+            if line.startswith("Savol:"):
+                q_text = line.replace("Savol:", "").strip()
+            elif line.startswith("Javob:"):
+                a_text = line.replace("Javob:", "").strip()
+
+        if q_text and a_text:
+            games[chat_id] = {"type": "quiz", "answers": [norm(a_text)]}
+            await wait_msg.edit_text(
+                f"🤖 <b>AI Viktorina!</b>\n\n❓ {q_text}\n\n"
+                f"Birinchi to'g'ri javob yozgan yutadi!"
+            )
+        else:
+            await wait_msg.edit_text("⚠️ AI savol tuzishda xatolik qildi. Qayta urinib ko'ring.")
 
     elif action == "riddle":
         r = random.choice(TOPISHMOQLAR)
@@ -233,7 +297,6 @@ async def handle(request):
     return web.Response(text="Bot muvaffaqiyatli ishlamoqda!")
 
 async def main():
-    # Render port tekshiruvini qondirish uchun HTTP server
     app = web.Application()
     app.router.add_get("/", handle)
     runner = web.AppRunner(app)
@@ -242,11 +305,9 @@ async def main():
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
 
-    # Botni ishga tushirish
     await bot.delete_webhook(drop_pending_updates=True)
     print("Bot ishga tushdi...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
