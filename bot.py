@@ -17,29 +17,38 @@ dp = Dispatcher()
 
 games: dict[int, dict] = {}   # chat_id -> faol o'yin holati
 
-# ==================== GEMINI AI SERVISI (XATONIKI ANIQLASH BILAN) ====================
+# ==================== GEMINI AI SERVISI (404 XATOSISIZ) ====================
 
 async def ask_gemini(prompt: str) -> str:
-    """Google Gemini AI bilan bog'lanuvchi va xatoni aniq ko'rsatuvchi funksiya"""
+    """Google Gemini AI bilan bog'lanuvchi funksiya"""
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         return "⚠️ Render Environment bo'limida GEMINI_API_KEY topilmadi!"
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    # Model nomlari ro'yxati (biri bo'lmasa ikkinchisini avtomatik sinaydi)
+    models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-1.5-flash"]
+    
     headers = {"Content-Type": "application/json"}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, headers=headers) as resp:
-                res_text = await resp.text()
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data["candidates"][0]["content"]["parts"][0]["text"]
-                else:
-                    return f"⚠️ AI API Xatoligi ({resp.status}): {res_text[:150]}"
-    except Exception as e:
-        return f"⚠️ Ulanishda xatolik yuz berdi: {e}"
+    async with aiohttp.ClientSession() as session:
+        for model in models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            try:
+                async with session.post(url, json=payload, headers=headers) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        return data["candidates"][0]["content"]["parts"][0]["text"]
+                    elif resp.status == 404:
+                        # 404 bo'lsa, keyingi model variantiga o'tadi
+                        continue
+                    else:
+                        res_text = await resp.text()
+                        return f"⚠️ AI API Xatoligi ({resp.status}): {res_text[:150]}"
+            except Exception as e:
+                return f"⚠️ Ulanishda xatolik yuz berdi: {e}"
+        
+        return "⚠️ Gemini modellari bilan bog'lanib bo'lmadi. API Kalitingizni va kvotangizni tekshiring."
 
 # ==================== MA'LUMOTLAR ====================
 
@@ -198,7 +207,6 @@ async def on_choice(cb: CallbackQuery):
         )
         ai_res = await ask_gemini(prompt)
 
-        # Agar AI xatolik matni qaytarsa
         if ai_res.startswith("⚠️"):
             return await wait_msg.edit_text(ai_res)
 
