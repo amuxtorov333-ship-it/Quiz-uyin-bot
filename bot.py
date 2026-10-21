@@ -1,12 +1,15 @@
 import asyncio
+import os
 import random
+from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ChatMemberStatus, ChatType, ParseMode
 from aiogram.client.default import DefaultBotProperties
 
-TOKEN = "8697416720:AAHtXUkzIfWLvgHak1RIEHssOj1YVX-cjD0"
+# Render Environment Variables bo'limidan "TOKEN" yoki "BOT_TOKEN" olinadi
+TOKEN = os.getenv("TOKEN") or os.getenv("BOT_TOKEN") or "BU_YERGA_TOKEN"
 
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
@@ -63,7 +66,7 @@ def menu_kb():
         [InlineKeyboardButton(text="⛔ To'xtatish", callback_data="g:stop")],
     ])
 
-# ==================== BOT STATUSI (qo'shildi / admin bo'ldi) ====================
+# ==================== BOT STATUSI ====================
 
 @dp.my_chat_member()
 async def on_bot_status(update: types.ChatMemberUpdated):
@@ -224,12 +227,26 @@ async def on_text(message: Message):
             f"Keyingi so'z <b>{text[-1].upper()}</b> harfi bilan boshlansin!"
         )
 
-# ==================== ISHGA TUSHIRISH ====================
+# ==================== RENDER PORT UCHUN SERVER ====================
+
+async def handle(request):
+    return web.Response(text="Bot muvaffaqiyatli ishlamoqda!")
 
 async def main():
+    # Render port tekshiruvini qondirish uchun HTTP server
+    app = web.Application()
+    app.router.add_get("/", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+    # Botni ishga tushirish
     await bot.delete_webhook(drop_pending_updates=True)
     print("Bot ishga tushdi...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
+    
