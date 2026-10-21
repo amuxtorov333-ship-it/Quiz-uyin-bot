@@ -17,24 +17,22 @@ dp = Dispatcher()
 
 games: dict[int, dict] = {}   # chat_id -> faol o'yin holati
 
-# ==================== OPENAI (CHATGPT) AI SERVISI ====================
+# ==================== GROQ AI SERVISI (BEPUL VA TEZ) ====================
 
 async def ask_ai(prompt: str) -> str:
-    """OpenAI ChatGPT bilan bog'lanuvchi funksiya"""
-    api_key = os.getenv("OPENAI_API_KEY")
+    """Groq AI (Llama-3) bilan bog'lanuvchi bepul va tezkor funksiya"""
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        return "⚠️ Render Environment bo'limida OPENAI_API_KEY topilmadi!"
+        return "⚠️ Render Environment bo'limida GROQ_API_KEY topilmadi!"
     
-    url = "https://api.openai.com/v1/chat/completions"
+    url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {"role": "user", "content": prompt}
-        ],
+        "model": "llama-3.3-70b-versatile",
+        "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.7
     }
     
@@ -46,7 +44,7 @@ async def ask_ai(prompt: str) -> str:
                     return data["choices"][0]["message"]["content"].strip()
                 else:
                     res_text = await resp.text()
-                    return f"⚠️ OpenAI API Xatoligi ({resp.status}): {res_text[:150]}"
+                    return f"⚠️ Groq API Xatoligi ({resp.status}): {res_text[:150]}"
     except Exception as e:
         return f"⚠️ Ulanishda xatolik yuz berdi: {e}"
 
@@ -146,12 +144,12 @@ async def cmd_start(message: Message):
 
 @dp.message(Command("ai"))
 async def cmd_ai(message: Message):
-    """ChatGPT bilan muloqot buyrug'i"""
+    """Groq AI bilan muloqot buyrug'i"""
     prompt = message.text.replace("/ai", "").strip()
     if not prompt:
         return await message.reply("🤖 AI ga savol berish uchun buyruqdan so'ng matn yozing.\nMasalan: <code>/ai Toshkent haqida qiziqarli fakt ayting</code>")
     
-    wait_msg = await message.reply("🤔 ChatGPT o'ylamoqda...")
+    wait_msg = await message.reply("🤔 Sun'iy intellekt o'ylamoqda...")
     ai_response = await ask_ai(prompt)
     await wait_msg.edit_text(ai_response)
 
@@ -324,4 +322,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-            
+    
