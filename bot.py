@@ -17,20 +17,19 @@ dp = Dispatcher()
 
 games: dict[int, dict] = {}   # chat_id -> faol o'yin holati
 
-# ==================== GROQ AI SERVISI (MODELLAR AWTOMATIK TEKSHIRUVI BILAN) ====================
+# ==================== GROQ AI SERVISI (ISHLAYDIGAN MODELLAR BILAN) ====================
 
 async def ask_ai(prompt: str) -> str:
-    """Groq AI bilan bog'lanuvchi va faol modelni avtomatik tanlovchi funksiya"""
+    """Groq AI bilan bog'lanuvchi va faol modelni avtomatik topuvchi funksiya"""
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         return "⚠️ Render Environment bo'limida GROQ_API_KEY topilmadi!"
     
-    # Groq-da faol bo'lgan modellar ro'yxati
+    # Groq-da rasmiy va doimiy faol bo'lgan modellar
     models = [
-        "llama-3.1-70b-versatile",
+        "llama-3.1-8b-instant",
         "llama3-70b-8192",
         "llama3-8b-8192",
-        "llama-3.3-70b-versatile",
         "mixtral-8x7b-32768"
     ]
     
@@ -40,6 +39,7 @@ async def ask_ai(prompt: str) -> str:
         "Content-Type": "application/json"
     }
     
+    last_error = ""
     async with aiohttp.ClientSession() as session:
         for model in models:
             payload = {
@@ -52,16 +52,16 @@ async def ask_ai(prompt: str) -> str:
                     if resp.status == 200:
                         data = await resp.json()
                         return data["choices"][0]["message"]["content"].strip()
-                    elif resp.status == 404:
-                        # Model topilmasa, keyingi modelni sinab ko'radi
-                        continue
                     else:
                         res_text = await resp.text()
-                        return f"⚠️ Groq API Xatoligi ({resp.status}): {res_text[:150]}"
+                        last_error = f"{model} ({resp.status}): {res_text[:100]}"
+                        # Xato bersa (400, 404 va b.), to'xtamasdan keyingi modelga o'tadi
+                        continue
             except Exception as e:
-                return f"⚠️ Ulanishda xatolik yuz berdi: {e}"
+                last_error = f"Ulanish xatosi: {e}"
+                continue
         
-        return "⚠️ Groq serverida faol model topilmadi. API Key va hisobingizni tekshiring."
+        return f"⚠️ Groq AI serverida mos model topilmadi.\nSo'nggi javob: <code>{last_error}</code>"
 
 # ==================== MA'LUMOTLAR ====================
 
@@ -337,4 +337,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-        
