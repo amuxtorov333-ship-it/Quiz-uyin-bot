@@ -17,36 +17,51 @@ dp = Dispatcher()
 
 games: dict[int, dict] = {}   # chat_id -> faol o'yin holati
 
-# ==================== GROQ AI SERVISI (BEPUL VA TEZ) ====================
+# ==================== GROQ AI SERVISI (MODELLAR AWTOMATIK TEKSHIRUVI BILAN) ====================
 
 async def ask_ai(prompt: str) -> str:
-    """Groq AI (Llama-3) bilan bog'lanuvchi bepul va tezkor funksiya"""
+    """Groq AI bilan bog'lanuvchi va faol modelni avtomatik tanlovchi funksiya"""
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         return "⚠️ Render Environment bo'limida GROQ_API_KEY topilmadi!"
+    
+    # Groq-da faol bo'lgan modellar ro'yxati
+    models = [
+        "llama-3.1-70b-versatile",
+        "llama3-70b-8192",
+        "llama3-8b-8192",
+        "llama-3.3-70b-versatile",
+        "mixtral-8x7b-32768"
+    ]
     
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.7
-    }
     
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, headers=headers) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data["choices"][0]["message"]["content"].strip()
-                else:
-                    res_text = await resp.text()
-                    return f"⚠️ Groq API Xatoligi ({resp.status}): {res_text[:150]}"
-    except Exception as e:
-        return f"⚠️ Ulanishda xatolik yuz berdi: {e}"
+    async with aiohttp.ClientSession() as session:
+        for model in models:
+            payload = {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.7
+            }
+            try:
+                async with session.post(url, json=payload, headers=headers) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        return data["choices"][0]["message"]["content"].strip()
+                    elif resp.status == 404:
+                        # Model topilmasa, keyingi modelni sinab ko'radi
+                        continue
+                    else:
+                        res_text = await resp.text()
+                        return f"⚠️ Groq API Xatoligi ({resp.status}): {res_text[:150]}"
+            except Exception as e:
+                return f"⚠️ Ulanishda xatolik yuz berdi: {e}"
+        
+        return "⚠️ Groq serverida faol model topilmadi. API Key va hisobingizni tekshiring."
 
 # ==================== MA'LUMOTLAR ====================
 
@@ -322,4 +337,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
+        
