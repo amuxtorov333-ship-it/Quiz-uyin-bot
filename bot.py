@@ -17,38 +17,38 @@ dp = Dispatcher()
 
 games: dict[int, dict] = {}   # chat_id -> faol o'yin holati
 
-# ==================== GEMINI AI SERVISI (404 XATOSISIZ) ====================
+# ==================== OPENAI (CHATGPT) AI SERVISI ====================
 
-async def ask_gemini(prompt: str) -> str:
-    """Google Gemini AI bilan bog'lanuvchi funksiya"""
-    api_key = os.getenv("GEMINI_API_KEY")
+async def ask_ai(prompt: str) -> str:
+    """OpenAI ChatGPT bilan bog'lanuvchi funksiya"""
+    api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return "⚠️ Render Environment bo'limida GEMINI_API_KEY topilmadi!"
+        return "⚠️ Render Environment bo'limida OPENAI_API_KEY topilmadi!"
     
-    # Model nomlari ro'yxati (biri bo'lmasa ikkinchisini avtomatik sinaydi)
-    models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-1.5-flash"]
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.7
+    }
     
-    headers = {"Content-Type": "application/json"}
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    
-    async with aiohttp.ClientSession() as session:
-        for model in models:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-            try:
-                async with session.post(url, json=payload, headers=headers) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        return data["candidates"][0]["content"]["parts"][0]["text"]
-                    elif resp.status == 404:
-                        # 404 bo'lsa, keyingi model variantiga o'tadi
-                        continue
-                    else:
-                        res_text = await resp.text()
-                        return f"⚠️ AI API Xatoligi ({resp.status}): {res_text[:150]}"
-            except Exception as e:
-                return f"⚠️ Ulanishda xatolik yuz berdi: {e}"
-        
-        return "⚠️ Gemini modellari bilan bog'lanib bo'lmadi. API Kalitingizni va kvotangizni tekshiring."
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data["choices"][0]["message"]["content"].strip()
+                else:
+                    res_text = await resp.text()
+                    return f"⚠️ OpenAI API Xatoligi ({resp.status}): {res_text[:150]}"
+    except Exception as e:
+        return f"⚠️ Ulanishda xatolik yuz berdi: {e}"
 
 # ==================== MA'LUMOTLAR ====================
 
@@ -146,13 +146,13 @@ async def cmd_start(message: Message):
 
 @dp.message(Command("ai"))
 async def cmd_ai(message: Message):
-    """AI bilan muloqot buyrug'i"""
+    """ChatGPT bilan muloqot buyrug'i"""
     prompt = message.text.replace("/ai", "").strip()
     if not prompt:
         return await message.reply("🤖 AI ga savol berish uchun buyruqdan so'ng matn yozing.\nMasalan: <code>/ai Toshkent haqida qiziqarli fakt ayting</code>")
     
-    wait_msg = await message.reply("🤔 Sun'iy intellekt o'ylamoqda...")
-    ai_response = await ask_gemini(prompt)
+    wait_msg = await message.reply("🤔 ChatGPT o'ylamoqda...")
+    ai_response = await ask_ai(prompt)
     await wait_msg.edit_text(ai_response)
 
 @dp.message(Command("oyin", "game"))
@@ -205,7 +205,7 @@ async def on_choice(cb: CallbackQuery):
             "Savol: [savol matni]\n"
             "Javob: [javob matni]"
         )
-        ai_res = await ask_gemini(prompt)
+        ai_res = await ask_ai(prompt)
 
         if ai_res.startswith("⚠️"):
             return await wait_msg.edit_text(ai_res)
@@ -324,3 +324,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+            
